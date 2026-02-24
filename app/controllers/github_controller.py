@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Header, BackgroundTasks
+from fastapi import APIRouter, Request, Header
 from app.core.logger import logger
 from app.services.github.processor import GitHubEventProcessor
 
@@ -27,14 +27,20 @@ class GithubController:
         logger.debug("Health check 'Hello World' endpoint called")
         return {"message": "Hello World"}
 
-    async def webhook(self, request: Request, background_tasks: BackgroundTasks, x_github_event: str = Header(None)):
+    async def webhook(self, request: Request, x_github_event: str = Header(None)):
         logger.info(f"Processing webhook for event '{x_github_event}'")
         
         # Parse payload
         payload = await request.json()
         
-        # Delegate to the Strategy Processor Context asynchronously via BackgroundTasks
-        # Never block the GitHub webhook response
-        background_tasks.add_task(self.processor.process_event, x_github_event, payload)
-        
+        # For PULL_REQUEST events, offload to the Celery queue (guaranteed delivery, ordered, retries)
+        if x_github_event in ["pull_request", "pull_request_review"]:
+            from app.tasks.review import process_pull_request_review
+            process_pull_request_review.delay(payload)
+        else:
+            # Fallback for generic unmapped events running locally in background
+            logger.info("Routing generic unmapped event to local event loop.")
+            import asyncio
+            asyncio.create_task(self.processor.process_event(x_github_event, payload))
+            
         return {"status": "ok"}

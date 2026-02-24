@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from app.api import api_router
 from app.core.logger import logger
+from app.core.celery_app import celery
 from app.middlewares.github.github_middleware import GitHubWebhookMiddleware
 from app.middlewares.request_logging_middleware import RequestLoggingMiddleware
 

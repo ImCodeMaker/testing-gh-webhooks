@@ -69,13 +69,38 @@ class GitHubClient:
         
         return [PRFile(**file_data) for file_data in data]
 
-    async def post_pr_review(self, owner: str, repo: str, pull_number: int, review_body: str) -> None:
-        """Post a review comment to the Pull Request."""
+    async def post_pr_review(self, owner: str, repo: str, pull_number: int, review_body: str, event: str = "COMMENT") -> None:
+        """Post a review comment to the Pull Request with an explicit verdict."""
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
         payload = {
             "body": review_body,
-            "event": "COMMENT"
+            "event": event
         }
         
         await self._request("POST", url, owner=owner, repo=repo, json=payload)
-        logger.info(f"Successfully posted PR review to {owner}/{repo}#{pull_number} using GitHub App token")
+        logger.info(f"Successfully posted PR review ({event}) to {owner}/{repo}#{pull_number} using GitHub App token")
+
+    async def create_commit_status(self, owner: str, repo: str, sha: str, state: str, description: str, context: str) -> None:
+        """
+        Create a commit status (pending, success, error, failure)
+        This shows up as the green checkmark or yellow dot on the PR.
+        """
+        url = f"{self.base_url}/repos/{owner}/{repo}/statuses/{sha}"
+        payload = {
+            "state": state,
+            "description": description[:140], # GitHub limits description to 140 chars
+            "context": context
+        }
+        
+        try:
+            await self._request("POST", url, owner=owner, repo=repo, json=payload)
+            logger.info(f"Successfully set commit {sha} status to {state} ({context})")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 403:
+                logger.warning(
+                    f"Skipping commit status for {sha}: GitHub App lacks 'Commit statuses' (Read & write) permissions. "
+                    "Please update permissions in GitHub App settings."
+                )
+            else:
+                logger.error(f"Failed to set commit status {sha}: {str(e)}")
+                # We don't raise here because we don't want to fail the entire AI review pipeline just for a missing status dot

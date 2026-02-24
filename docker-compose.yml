@@ -1,0 +1,52 @@
+services:
+  # The Redis broker and result backend for Celery
+  redis:
+    image: redis:7-alpine
+    container_name: chief-redis
+    ports:
+      - "6379:6379"
+    # Enable AOF persistence so the queue survives restarts
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # The Background Task worker parsing Pull Request rules
+  celery-worker:
+    build: .
+    container_name: chief-celery-worker
+    # Use worker_concurrency=1 to process ONE review at a time, enforcing real FIFO sequence
+    command: celery -A app.core.celery_app.celery worker --loglevel=info --concurrency=1
+    depends_on:
+      - redis
+    # Pass necessary config for Github and AI integrations
+    env_file:
+      - .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    restart: unless-stopped
+    volumes:
+      - .:/app
+
+  # Flower Dashboard for Visual Celery Monitoring
+  flower:
+    build: .
+    container_name: chief-flower
+    working_dir: /app
+    command: celery -A app.core.celery_app.celery flower --port=5555
+    depends_on:
+      - redis
+      - celery-worker
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - PYTHONPATH=/app
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+volumes:
+  redis_data:

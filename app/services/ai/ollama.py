@@ -4,6 +4,7 @@ import httpx
 from app.core.settings import settings
 from app.core.logger import logger
 from app.services.ai.base import AIProvider
+from app.services.ai.prompt import REVIEW_PROMPT_TEMPLATE
 
 class OllamaProvider(AIProvider):
     def __init__(self):
@@ -53,15 +54,9 @@ class OllamaProvider(AIProvider):
         title = context.get('title', 'Unknown Title')
         filename = context.get('filename', 'Unknown File')
         
-        return f"""
-Please review the following code changes for the file `{filename}` in repository `{repo}`.
-Pull Request Title: {title}
-
-Diff:
-```diff
-{diff}
-```
-
-Provide explicit feedback on the additions and modifications. If everything looks good, briefly state that. 
-Highlight lines roughly if possible and be constructive.
-"""
+        return REVIEW_PROMPT_TEMPLATE.format(
+            repo=repo,
+            title=title,
+            filename=filename,
+            diff=diff
+        )

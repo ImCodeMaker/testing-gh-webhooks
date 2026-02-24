@@ -4,6 +4,8 @@ from typing import Dict, Any
 from app.core.settings import settings
 from app.core.logger import logger
 from app.services.ai.base import AIProvider
+from app.services.ai.prompt import REVIEW_PROMPT_TEMPLATE
+from app.services.ai.base import AIProvider
 
 class GeminiProvider(AIProvider):
     def __init__(self):
@@ -16,8 +18,7 @@ class GeminiProvider(AIProvider):
         
         # We instantiate it directly
         self.model = genai.GenerativeModel(
-            model_name=self.model_name,
-            system_instruction="You are a senior backend engineer performing a thorough code review. Focus on identifying bugs, security issues, performance bottlenecks, code smells, and missing error handling. Keep feedback concise, actionable, and formatted in markdown. No fluff, just real professional comments."
+            model_name=self.model_name
         )
 
     async def review_code(self, diff: str, context: Dict[str, Any]) -> str:
@@ -46,15 +47,9 @@ class GeminiProvider(AIProvider):
         title = context.get('title', 'Unknown Title')
         filename = context.get('filename', 'Unknown File')
         
-        return f"""
-Please review the following code changes for the file `{filename}` in repository `{repo}`.
-Pull Request Title: {title}
-
-Diff:
-```diff
-{diff}
-```
-
-Provide explicit feedback on the additions and modifications. If everything looks good, briefly state that. 
-Highlight lines roughly if possible and be constructive.
-"""
+        return REVIEW_PROMPT_TEMPLATE.format(
+            repo=repo,
+            title=title,
+            filename=filename,
+            diff=diff
+        )
